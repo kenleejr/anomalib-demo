@@ -28,11 +28,16 @@ def train():
                             "log_level": "INFO",
                             "show_images": True,
                             "dataset": {
-                                "name": "mvtec",
-                                "format": "mvtec",
-                                "path": "./datasets/MVTec",
+                                "name": "MVTec-bottle",
+                                "format": "folder",
+                                "dataset-artifact": "MVTec-bottle:latest",
+                                "root": "./artifacts/",
+                                "normal_dir": "normal/",
+                                "abnormal_dir": "test_abnormal/",
+                                "normal_test_dir": "test_normal/",
+                                "mask_dir": "mask_dir/",
+                                "extensions": ".png",
                                 "task": "segmentation",
-                                "category": "bottle",
                                 "train_batch_size": 32,
                                 "test_batch_size": 32,
                                 "num_workers": 8,
@@ -115,7 +120,7 @@ def train():
                                 "limit_test_batches": 1.0,
                                 "limit_predict_batches": 1.0,
                                 "val_check_interval": 1.0,
-                                "log_every_n_steps": 50,
+                                "log_every_n_steps": 1,
                                 "accelerator": "auto",
                                 "strategy": None,
                                 "sync_batchnorm": False,
@@ -128,6 +133,9 @@ def train():
                                 "reload_dataloaders_every_n_epochs": 0,
                             }}
     )
+
+    art = wandb.use_artifact(wandb.config["dataset"]["dataset-artifact"])
+    art.download(root=wandb.config["dataset"]["root"])
     
     configure_logger(level=wandb.config.log_level)
 

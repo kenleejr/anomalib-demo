@@ -1,9 +1,12 @@
-FROM python:3.8-slim
+FROM pytorch/pytorch:2.0.0-cuda11.7-cudnn8-runtime
 
 COPY ./launch_jobs/requirements.txt requirements.txt
-RUN pip install -r requirements.txt
-RUN apt-get update
-RUN apt-get install ffmpeg libsm6 libxext6  -y
+RUN pip install -r requirements.txt && \
+    apt-get update && \
+    apt-get install --assume-yes git
+RUN git clone https://github.com/openvinotoolkit/anomalib.git anomalib && \
+    pip install -e ./anomalib && \
+    apt-get install ffmpeg libsm6 libxext6  -y
 
 COPY ./launch_jobs /anomalib
 WORKDIR /anomalib
