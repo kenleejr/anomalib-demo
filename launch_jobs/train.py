@@ -5,6 +5,7 @@ ENTITY = "wandb-smle"
 import logging
 import warnings
 import tempfile
+import json
 
 import wandb
 from pytorch_lightning import Trainer, seed_everything
@@ -63,11 +64,12 @@ def train():
                             },
                             "model": {
                                 "name": "patchcore",
+                                "model_artifact_name": "patchcore-model",
                                 "backbone": "wide_resnet50_2",
                                 "pre_trained": True,
                                 "layers": ["layer2", "layer3"],
-                                "coreset_sampling_ratio": 0.1,
-                                "num_neighbors": 9,
+                                "coreset_sampling_ratio": 0.05,
+                                "num_neighbors": 10,
                                 "normalization_method": "min_max"
                             },
                             "metrics": {
@@ -88,6 +90,7 @@ def train():
                             },
                             "project": {
                                 "seed": 0,
+                                "results_artifact_name": "patchcore-results",
                                 "path": "./results"
                             },
                             "logging": {
@@ -174,6 +177,20 @@ def train():
     else:
         logger.info("Testing the model.")
         trainer.test(model=model, datamodule=datamodule)
+
+    results_path = f"{wandb.config['project']['path']}/{wandb.config['model']['name']}/{wandb.config['dataset']['name']}"
+
+    # Log model as W&B Artifact
+    with open('./results/patchcore/MVTec-bottle/run/weights/onnx/metadata.json', 'r') as json_file:
+        metadata = json.load(json_file)
+    model_art = wandb.Artifact(wandb.config["model"]["model_artifact_name"], type="model", metadata=metadata)
+    model_art.add_file(results_path + "/run/weights/onnx/model.onnx")
+    wandb.log_artifact(model_art)
+
+    # Log results as W&B Artifact
+    results_art = wandb.Artifact(wandb.config["project"]["results_artifact_name"], type="validation_results")
+    results_art.add_dir(results_path + "/run/images")
+    wandb.log_artifact(results_art)
 
     wandb.run.log_code(".")
     wandb.finish()
