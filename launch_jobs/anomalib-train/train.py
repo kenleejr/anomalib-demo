@@ -1,6 +1,6 @@
 # FORM VARIABLES
-PROJECT_NAME = "anomalib" 
-ENTITY = "wandb-smle"
+PROJECT_NAME = "anomalib-demo" 
+ENTITY = "cvproject-trial-team"
 
 import logging
 import warnings
@@ -28,14 +28,15 @@ def train():
                            config={
                             "log_level": "INFO",
                             "show_images": True,
+                            "run_name": "MVTec-transistor-train",
                             "dataset": {
-                                "name": "MVTec-bottle",
+                                "name": "MVTec-transistor",
                                 "format": "folder",
-                                "dataset-artifact": "MVTec-bottle:latest",
+                                "dataset-artifact": "MVTec-transistor:latest",
                                 "root": "./artifacts/",
-                                "normal_dir": "normal/",
-                                "abnormal_dir": "test_abnormal/",
-                                "normal_test_dir": "test_normal/",
+                                "normal_dir": "normal_dir/",
+                                "abnormal_dir": "abnormal_dir/",
+                                "normal_test_dir": "normal_test_dir/",
                                 "mask_dir": "mask_dir/",
                                 "extensions": ".png",
                                 "task": "segmentation",
@@ -137,6 +138,7 @@ def train():
                             }}
     )
 
+    run.name = wandb.config["run_name"]
     art = wandb.use_artifact(wandb.config["dataset"]["dataset-artifact"])
     art.download(root=wandb.config["dataset"]["root"])
     
@@ -181,10 +183,10 @@ def train():
     results_path = f"{wandb.config['project']['path']}/{wandb.config['model']['name']}/{wandb.config['dataset']['name']}"
 
     # Log model as W&B Artifact
-    with open('./results/patchcore/MVTec-bottle/run/weights/onnx/metadata.json', 'r') as json_file:
+    with open(f'{results_path}/run/onnx/meta_data.json', 'r') as json_file:
         metadata = json.load(json_file)
     model_art = wandb.Artifact(wandb.config["model"]["model_artifact_name"], type="model", metadata=metadata)
-    model_art.add_file(results_path + "/run/weights/onnx/model.onnx")
+    model_art.add_file(results_path + "/run/onnx/model.onnx")
     wandb.log_artifact(model_art)
 
     # Log results as W&B Artifact
@@ -192,7 +194,6 @@ def train():
     results_art.add_dir(results_path + "/run/images")
     wandb.log_artifact(results_art)
 
-    wandb.run.log_code(".")
     wandb.finish()
 
 if __name__ == "__main__":

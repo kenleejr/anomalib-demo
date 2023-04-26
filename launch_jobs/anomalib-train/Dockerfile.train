@@ -1,0 +1,6 @@
+FROM kenleejr/anomalib:latest
+
+COPY ./launch_jobs/anomalib-train/train.py /anomalib/train.py
+WORKDIR /anomalib
+
+CMD ["python", "/anomalib/train.py"]
