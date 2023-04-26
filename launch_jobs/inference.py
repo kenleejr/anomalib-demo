@@ -9,6 +9,7 @@ from pytorch_lightning import Trainer
 from torch.utils.data import DataLoader
 import onnxruntime
 import onnx
+import torch
 
 from anomalib.config import get_configurable_parameters
 from anomalib.data.inference import InferenceDataset
@@ -268,24 +269,43 @@ def infer():
     else:
         print("The model is valid!")
 
-    session = onnxruntime.InferenceSession(model_path)
+    session = onnxruntime.InferenceSession(model_path, providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
 
     # Run ONNX Runtime inference
     results = []
     for batch in dataloader:
-        input_name = session.get_inputs()[0].name
-        output_name = session.get_outputs()[0].name
-        print(input_name)
-        print(output_name)
-        print(batch["image"].shape)
-        result = session.run([output_name ,"554"], {input_name: batch["image"].numpy()})
-        print(result)
-        results.append(result)
-    results = np.vstack(results)
-    print(results)
+        binding = session.io_binding()
 
-    log_wandb_table(results)
-    return results
+        input_tensor = batch["image"].contiguous()
+
+        binding.bind_input(
+            name='input',
+            device_type='cuda',
+            device_id=0,
+            element_type=np.float32,
+            shape=tuple(input_tensor.shape),
+            buffer_ptr=input_tensor.data_ptr(),
+            )
+
+        ## Allocate the PyTorch tensor for the model output
+        Y_shape = ... # You need to specify the output PyTorch tensor shape
+        Y_tensor = torch.empty(Y_shape, dtype=torch.float32, device='cuda:0').contiguous()
+        binding.bind_output(
+            name='output',
+            device_type='cuda',
+            device_id=0,
+            element_type=np.float32,
+            shape=tuple(Y_tensor.shape),
+            buffer_ptr=Y_tensor.data_ptr(),
+        )
+
+        result = session.run_with_iobinding(binding)
+        results.append(result)
+        results = np.vstack(results)
+        print(results)
+
+        log_wandb_table(results)
+        return results
 
 if __name__ == "__main__":
     results = infer()
