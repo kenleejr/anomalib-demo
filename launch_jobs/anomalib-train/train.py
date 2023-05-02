@@ -194,6 +194,8 @@ def train():
     results_art.add_dir(results_path + "/run/images")
     wandb.log_artifact(results_art)
 
+
+    wandb.log_code(".")  ## Creates an artifact
     wandb.finish()
 
 if __name__ == "__main__":
