@@ -6,10 +6,12 @@ import logging
 import warnings
 import tempfile
 import json
+from pathlib import Path
 
 import wandb
 from pytorch_lightning import Trainer, seed_everything
 from pytorch_lightning.loggers import WandbLogger
+import torch
 
 from omegaconf import OmegaConf
 from anomalib.config import get_configurable_parameters
@@ -66,6 +68,8 @@ def train():
                             "model": {
                                 "name": "patchcore",
                                 "model_artifact_name": "patchcore-model",
+                                "export_path_root": "./artifacts",
+                                "opset_version": 11,
                                 "backbone": "wide_resnet50_2",
                                 "pre_trained": True,
                                 "layers": ["layer2", "layer3"],
@@ -98,9 +102,9 @@ def train():
                                 "logger": [],
                                 "log_graph": False
                             },
-                            "optimization": {
-                                "export_mode": "onnx"
-                            },
+                            # "optimization": {
+                            #     "export_mode": "onnx"
+                            # },
                             "trainer": {
                                 "enable_checkpointing": True,
                                 "default_root_dir": None,
@@ -159,14 +163,19 @@ def train():
     model = get_model(config)
 
     # Add WandbLogger to log metrics to wandb
-    wandb_logger = WandbLogger(log_model=True, save_code=True)
+    wandb_logger = WandbLogger(log_model=True, 
+                               save_code=True, 
+                               checkpoint_name=f"{wandb.config['model']['model_artifact_name']}-torch", )
     
     experiment_logger = get_experiment_logger(config)
     experiment_logger.append(wandb_logger)
 
     callbacks = get_callbacks(config)
 
-    trainer = Trainer(**config.trainer, logger=experiment_logger, callbacks=callbacks)
+    trainer = Trainer(**config.trainer, 
+                      logger=experiment_logger, 
+                      callbacks=callbacks)
+    
     logger.info("Training the model.")
     trainer.fit(model=model, datamodule=datamodule)
 
@@ -183,10 +192,23 @@ def train():
     results_path = f"{wandb.config['project']['path']}/{wandb.config['model']['name']}/{wandb.config['dataset']['name']}"
 
     # Log model as W&B Artifact
-    with open(f'{results_path}/run/onnx/meta_data.json', 'r') as json_file:
-        metadata = json.load(json_file)
-    model_art = wandb.Artifact(wandb.config["model"]["model_artifact_name"], type="model", metadata=metadata)
-    model_art.add_file(results_path + "/run/onnx/model.onnx")
+    export_path = Path(f"{wandb.config['model']['export_path_root']}/{wandb.run.id}")
+    export_path.mkdir(parents=True, exist_ok=True)
+    onnx_path = export_path / "model.onnx"
+
+    torch.onnx.export(
+        model.model,
+        torch.zeros((1, 3, wandb.config['dataset']["center_crop"], wandb.config['dataset']["center_crop"])).to(model.device),
+        onnx_path,
+        opset_version=wandb.config['model']["opset_version"],
+        input_names=["input"],
+        output_names=["output"],
+    )
+
+    # with open(f'{results_path}/run/onnx/meta_data.json', 'r') as json_file:
+    #     metadata = json.load(json_file)
+    model_art = wandb.Artifact(f"{wandb.config['model']['model_artifact_name']}-onnx", type="model")
+    model_art.add_file(onnx_path)
     wandb.log_artifact(model_art)
 
     # Log results as W&B Artifact
@@ -194,8 +216,6 @@ def train():
     results_art.add_dir(results_path + "/run/images")
     wandb.log_artifact(results_art)
 
-
-    wandb.log_code(".")  ## Creates an artifact
     wandb.finish()
 
 if __name__ == "__main__":

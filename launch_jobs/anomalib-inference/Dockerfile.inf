@@ -1,0 +1,6 @@
+FROM kenleejr/anomalib:latest
+
+COPY ./launch_jobs/anomalib-inference/inference_torch.py /anomalib/inference_torch.py
+WORKDIR /anomalib
+
+CMD ["python", "/anomalib/inference_torch.py"]
