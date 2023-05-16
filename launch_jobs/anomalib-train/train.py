@@ -68,6 +68,7 @@ def train():
                             "model": {
                                 "name": "patchcore",
                                 "model_artifact_name": "MVTec-transistor-patchcore",
+                                "registered_model_name": "MVTec-transistor",
                                 "export_path_root": "./artifacts",
                                 "onnx_opset_version": 11,
                                 "backbone": "wide_resnet50_2",
@@ -219,6 +220,10 @@ def train():
     results_art = wandb.Artifact(wandb.config["project"]["results_artifact_name"], type="validation_results")
     results_art.add_dir(results_path + "/run/images")
     wandb.log_artifact(results_art)
+
+
+    torch_art = wandb.use_artifact(f"{wandb.config['model']['model_artifact_name']}-torch:latest")
+    wandb.run.link_artifact(torch_art, f"model-registry/{wandb.config['model']['registered_model_name']}", aliases=["staging"])
 
     wandb.config = {}
     wandb.config = wandb_config_cache
