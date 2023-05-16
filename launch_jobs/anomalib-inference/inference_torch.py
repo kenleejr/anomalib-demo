@@ -11,6 +11,7 @@ from torch.utils.data import DataLoader
 import onnxruntime
 import onnx
 import torch
+import os
 
 from anomalib.config import get_configurable_parameters
 from anomalib.data.inference import InferenceDataset
@@ -96,20 +97,21 @@ def infer():
     wandb.init(project=PROJECT_NAME, 
                entity=ENTITY,
                job_type='inference',
-               config={"log_level": "INFO",
+               config={"run_name": "MVTec-transistor-eval",
+                       "log_level": "INFO",
                        "model": "patchcore",
                         "show_images": True,
                         "model_checkpoint": "MVTec-transistor-patchcore-torch:latest",
                        "inference_dataset": "MVTec-transistor:latest",
-                       "inference_dataset_path": "abnormal_dir",
+                       "inference_dataset_path": "abnormal_dir/",
                        "output": "inference_results",
                        "artifacts_root": "./artifacts",
                        "visualization_mode": "simple",
                        "show": False,
                             "dataset": {
-                                "name": "MVTec-capsule",
+                                "name": "MVTec-transistor",
                                 "format": "folder",
-                                "dataset-artifact": "MVTec-capsule:latest",
+                                "dataset-artifact": "MVTec-transistor:latest",
                                 "root": "./artifacts/",
                                 "normal_dir": "normal/",
                                 "abnormal_dir": "test_abnormal/",
@@ -144,7 +146,7 @@ def infer():
                                 "name": "patchcore",
                                 "model_artifact_name": "MVTec-patchcore",
                                 "export_path_root": "./artifacts",
-                                "opset_version": 11,
+                                "onnx_opset_version": 11,
                                 "backbone": "wide_resnet50_2",
                                 "pre_trained": True,
                                 "layers": ["layer2", "layer3"],
@@ -216,19 +218,20 @@ def infer():
                             }
                         })
 
+    wandb.run.name = wandb.config["run_name"]
     # Retrieve versioned artifacts for inference
     inf_art = wandb.use_artifact(wandb.config["inference_dataset"])
-    inf_art.download(root=wandb.config["artifacts_root"])
+    inf_path_at = inf_art.download()
 
     model_art = wandb.use_artifact(wandb.config["model_checkpoint"])
-    model_art.download(root=str(Path(wandb.config["artifacts_root"]) / wandb.run.id))
-
+    model_path_at = model_art.download()
+    
     wandb_conf = OmegaConf.create(dict(wandb.config))
     with open("config.yml", "w+") as fp:
         OmegaConf.save(config=wandb_conf, f=fp.name)
         config = get_configurable_parameters(model_name=wandb.config["model"], config_path="config.yml")
 
-    config.trainer.resume_from_checkpoint = str(Path(wandb.config["artifacts_root"]) / wandb.run.id /  "model.ckpt")
+    config.trainer.resume_from_checkpoint = str(Path(model_path_at) /  "model.ckpt")
     config.visualization.show_images = wandb.config["show"]
     config.visualization.mode = wandb.config["visualization_mode"]
 
@@ -260,7 +263,11 @@ def infer():
     )
 
     # create the dataset
-    dataset = InferenceDataset(str(Path(wandb.config["artifacts_root"]) / wandb.config["inference_dataset_path"]), image_size=tuple(config.dataset.image_size), transform=transform)
+    inference_dataset_path = os.path.join(inf_path_at, wandb.config["inference_dataset_path"])
+    print(inference_dataset_path)
+    dataset = InferenceDataset(inference_dataset_path, 
+                               image_size=tuple(config.dataset.image_size), 
+                               transform=transform)
     dataloader = DataLoader(dataset)
 
     # generate predictions

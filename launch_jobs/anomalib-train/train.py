@@ -67,9 +67,9 @@ def train():
                             },
                             "model": {
                                 "name": "patchcore",
-                                "model_artifact_name": "patchcore-model",
+                                "model_artifact_name": "MVTec-transistor-patchcore",
                                 "export_path_root": "./artifacts",
-                                "opset_version": 11,
+                                "onnx_opset_version": 11,
                                 "backbone": "wide_resnet50_2",
                                 "pre_trained": True,
                                 "layers": ["layer2", "layer3"],
@@ -142,9 +142,11 @@ def train():
                             }}
     )
 
+    wandb_config_cache = dict(wandb.config).copy()
     run.name = wandb.config["run_name"]
     art = wandb.use_artifact(wandb.config["dataset"]["dataset-artifact"])
-    art.download(root=wandb.config["dataset"]["root"])
+    art.download(root=f"{wandb.config['dataset']['root']}/{wandb.config['dataset']['dataset-artifact']}")
+    wandb.config['dataset']['root'] = f"{wandb.config['dataset']['root']}/{wandb.config['dataset']['dataset-artifact']}"
     
     configure_logger(level=wandb.config.log_level)
 
@@ -165,13 +167,12 @@ def train():
     # Add WandbLogger to log metrics to wandb
     wandb_logger = WandbLogger(log_model=True, 
                                save_code=True, 
-                               checkpoint_name=f"{wandb.config['model']['model_artifact_name']}-torch", )
+                               checkpoint_name=f"{wandb.config['model']['model_artifact_name']}-torch")
     
     experiment_logger = get_experiment_logger(config)
     experiment_logger.append(wandb_logger)
 
     callbacks = get_callbacks(config)
-
     trainer = Trainer(**config.trainer, 
                       logger=experiment_logger, 
                       callbacks=callbacks)
@@ -200,22 +201,27 @@ def train():
         model.model,
         torch.zeros((1, 3, wandb.config['dataset']["center_crop"], wandb.config['dataset']["center_crop"])).to(model.device),
         onnx_path,
-        opset_version=wandb.config['model']["opset_version"],
+        opset_version=wandb.config['model']["onnx_opset_version"],
         input_names=["input"],
         output_names=["output"],
     )
 
-    # with open(f'{results_path}/run/onnx/meta_data.json', 'r') as json_file:
-    #     metadata = json.load(json_file)
+    # script = model.to_torchscript()
+    # torch.jit.save(script, "model.pt")
+    # script_art = wandb.Artifact(f"{wandb.config['model']['model_artifact_name']}-torchscript", type="model")
+    # script_art.add_file("model.pt")
+    # wandb.log_artifact(script_art)
+
     model_art = wandb.Artifact(f"{wandb.config['model']['model_artifact_name']}-onnx", type="model")
     model_art.add_file(onnx_path)
     wandb.log_artifact(model_art)
 
-    # Log results as W&B Artifact
     results_art = wandb.Artifact(wandb.config["project"]["results_artifact_name"], type="validation_results")
     results_art.add_dir(results_path + "/run/images")
     wandb.log_artifact(results_art)
 
+    wandb.config = {}
+    wandb.config = wandb_config_cache
     wandb.finish()
 
 if __name__ == "__main__":
