@@ -19,18 +19,18 @@ in a shell on the EC2 instance. To run an agent in a k8s cluster see the [Launch
 Once the agent is running, you are now ready to create and launch jobs to it. Once a job is created, you can launch it via CLI or the W&B UI. 
 To create the training job run:
 ```
-docker build . -f launch_jobs/anomalib-training/Dockerfile.train -t <my_image:tag>
-docker push <my_image:tag>
+docker build . -f launch_jobs/anomalib-training/Dockerfile.train -t <repo/my_image:tag>
+docker push <repo/my_image:tag>
 ```
 
 To create the anomalib inference job:
 ```
-docker build . -f launch_jobs/anomalib-inference/Dockerfile.inf -t <my_image:tag>
-docker push <my_image:tag>
+docker build . -f launch_jobs/anomalib-inference/Dockerfile.inf -t <repo/my_image:tag>
+docker push <repo/my_image:tag>
 ```
 To launch the images, you can simply execute:
 ```
-wandb launch -d <my_image:tag> -q <my_queue> -e <my_entity> -p <my_project> -c <path_to_my_config.json>
+wandb launch -d <repo/my_image:tag> -q <my_queue> -e <my_entity> -p <my_project> -c <path_to_my_config.json>
 ```
 After the job is launched the first time, a named job will get created in your W&B project and can be re-used and re-configured however you like.
 For instance, you may want to change out the training dataset or the hyperparameters of the training job that runs. Each time you run the above steps with a new image, W&B will create a new version of the job. To launch a specific job version, run:
