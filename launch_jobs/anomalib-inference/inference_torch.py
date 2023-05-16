@@ -101,7 +101,7 @@ def infer():
                        "log_level": "INFO",
                        "model": "patchcore",
                         "show_images": True,
-                        "model_checkpoint": "MVTec-transistor-patchcore-torch:latest",
+                        "registered_model_name_alias": "MVTec-transistor:latest",
                        "inference_dataset": "MVTec-transistor:latest",
                        "inference_dataset_path": "abnormal_dir/",
                        "output": "inference_results",
@@ -144,7 +144,7 @@ def infer():
                             },
                             "model": {
                                 "name": "patchcore",
-                                "model_artifact_name": "MVTec-patchcore",
+                                "model_artifact_name": "MVTec-transistor-patchcore",
                                 "export_path_root": "./artifacts",
                                 "onnx_opset_version": 11,
                                 "backbone": "wide_resnet50_2",
@@ -218,12 +218,16 @@ def infer():
                             }
                         })
 
+    wandb.config["trainer"]["limit_train_batches"] =  1.0
+    wandb.config["trainer"]["limit_val_batches"] = 1.0
+    wandb.config["trainer"]["limit_test_batches"] = 1.0
+    wandb.config["trainer"]["limit_predict_batches"] = 1.0
     wandb.run.name = wandb.config["run_name"]
     # Retrieve versioned artifacts for inference
     inf_art = wandb.use_artifact(wandb.config["inference_dataset"])
     inf_path_at = inf_art.download()
 
-    model_art = wandb.use_artifact(wandb.config["model_checkpoint"])
+    model_art = wandb.use_artifact(f"model-registry/{wandb.config['registered_model_name_alias']}")
     model_path_at = model_art.download()
     
     wandb_conf = OmegaConf.create(dict(wandb.config))
@@ -268,11 +272,12 @@ def infer():
     dataset = InferenceDataset(inference_dataset_path, 
                                image_size=tuple(config.dataset.image_size), 
                                transform=transform)
+    print(dataset.__len__())
     dataloader = DataLoader(dataset)
 
     # generate predictions
     results = trainer.predict(model=model, dataloaders=[dataloader])
-    log_wandb_table(wandb.config["model_checkpoint"].split(":")[0], results)
+    log_wandb_table(wandb.config["registered_model_name_alias"].split(":")[0] + "-eval", results)
     return results
 
 if __name__ == "__main__":
