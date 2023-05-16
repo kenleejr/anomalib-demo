@@ -9,7 +9,7 @@ The `launch_jobs` directory contains the scripts and Dockerfiles required to cre
 Currently there are two jobs supported: anomalib training and anomalib inference. 
 These jobs take the [CLI utilities](https://github.com/openvinotoolkit/anomalib/blob/v0.4.0/tools/train.py) in the anomalib repo and turn them into portable W&B jobs that can be run on other infrastructure without having to worry about environment configuration. 
 
-To run jobs you will first need a to 1) create a queue and 2) run a W&B agent in infrastructure of your choice. For instance, if you want to run the anomalib training job on an EC2 instance, you would run:
+To run jobs you will first need a to 1) [create a queue](https://docs.wandb.ai/guides/launch/create-queue) and 2) run a [W&B agent](https://docs.wandb.ai/guides/launch/run-agent) in infrastructure of your choice. For instance, if you want to run the anomalib training job on an EC2 instance, you would run:
 ```
 pip install wandb
 wandb launch-agent -q <my_queue> -e <my_entity> -j <num_parallel_jobs>
@@ -32,7 +32,7 @@ To launch the images, you can simply execute:
 ```
 wandb launch -d <my_image:tag> -q <my_queue> -e <my_entity> -p <my_project> -c <path_to_my_config.json>
 ```
-After the job is launched initially, a named job will get created in your W&B project and can be re-used and re-configured however you like.
+After the job is launched the first time, a named job will get created in your W&B project and can be re-used and re-configured however you like.
 For instance, you may want to change out the training dataset or the hyperparameters of the training job that runs. Each time you run the above steps with a new image, W&B will create a new version of the job. To launch a specific job version, run:
 ```
 wandb launch -j <my_job_name:alias> -q <my_queue> -e <my_entity> -p <my_project> -c <path_to_my_config.json>
