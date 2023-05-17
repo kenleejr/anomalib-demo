@@ -1,15 +1,16 @@
-PROJECT_NAME = "anomalib" 
-ENTITY = "wandb-smle"
+"""Inference Entrypoint script."""
+PROJECT_NAME = "anomalib-demo" 
+ENTITY = "cvproject-trial-team"
 
 from pathlib import Path
 
 import wandb
 import numpy as np
-from pytorch_lightning import Trainer
 from torch.utils.data import DataLoader
+import torch
 import onnxruntime
 import onnx
-import torch
+import os
 
 from anomalib.config import get_configurable_parameters
 from anomalib.data.inference import InferenceDataset
@@ -34,7 +35,7 @@ from anomalib.utils.callbacks import (
     PostProcessingConfigurationCallback,
 )
 
-def log_wandb_table(results):
+def log_wandb_table(model_name, results):
   inference_table = wandb.Table(columns = ["prediction_pixels",
                                            "prediction_heatmap",
                                            "global_prediction", 
@@ -42,7 +43,7 @@ def log_wandb_table(results):
 
   for r in results:
     # Convert the tensors to numpy arrays and wrap the image and masks with wandb.Image()
-    image = r["image"].numpy().squeeze().transpose(1, 2, 0)
+    image = r.transpose(1, 2, 0)
     anomaly_map = r["anomaly_maps"].numpy().squeeze()
     pred_mask = r["pred_masks"].numpy().squeeze()
     pred_boxes = r["pred_boxes"]
@@ -61,23 +62,25 @@ def log_wandb_table(results):
         }
     })
     # Create prediction_boxes image with bounding boxes
-    boxes = []
-    for i, b in enumerate(pred_boxes):
-      b = b.squeeze()
-      boxes.append({
-          "position": {
-              "minX": float(b[0]),
-              "maxX": float(b[2]),
-              "minY": float(b[1]),
-              "maxY": float(b[3])
-          },
-          "class_id": int(r["box_labels"][i].item()),
-          "box_caption": "Anomaly",
-          "scores": {
-              "score": float(r["box_scores"][i].item())
-          }
-      })
-    prediction_boxes = wandb.Image(image, boxes={"predictions": {"box_data": boxes}})
+    # boxes = []
+    # for i, b in enumerate(pred_boxes):
+    #   if b.shape[0] != 4:
+    #      continue
+    #   b = b.squeeze()
+    #   boxes.append({
+    #       "position": {
+    #           "minX": float(b[0]),
+    #           "maxX": float(b[2]),
+    #           "minY": float(b[1]),
+    #           "maxY": float(b[3])
+    #       },
+    #       "class_id": int(r["box_labels"][i].item()),
+    #       "box_caption": "Anomaly",
+    #       "scores": {
+    #           "score": float(r["box_scores"][i].item())
+    #       }
+    #   })
+    # prediction_boxes = wandb.Image(image, boxes={"predictions": {"box_data": boxes}})
 
     # Extract other fields
     global_prediction = float(r["pred_scores"].item())
@@ -85,7 +88,7 @@ def log_wandb_table(results):
     inference_table.add_data(prediction, heat_map, global_prediction, global_label)
 
   # Log the table
-  wandb.log({"output_table": inference_table})
+  wandb.log({f"{model_name}/validation_table": inference_table})
 
 def infer():
     """Run inference."""
@@ -93,20 +96,21 @@ def infer():
     wandb.init(project=PROJECT_NAME, 
                entity=ENTITY,
                job_type='inference',
-               config={"log_level": "INFO",
+               config={"run_name": "MVTec-transistor-eval",
+                       "log_level": "INFO",
                        "model": "patchcore",
                         "show_images": True,
-                        "model_checkpoint": "patchcore-model:latest",
-                       "inference_dataset": "MVTec-bottle:latest",
-                       "inference_dataset_path": "test_abnormal",
+                        "registered_model_name_alias": "MVTec-transistor:latest",
+                       "inference_dataset": "MVTec-transistor:latest",
+                       "inference_dataset_path": "abnormal_dir/",
                        "output": "inference_results",
                        "artifacts_root": "./artifacts",
                        "visualization_mode": "simple",
                        "show": False,
                             "dataset": {
-                                "name": "MVTec-bottle",
+                                "name": "MVTec-transistor",
                                 "format": "folder",
-                                "dataset-artifact": "MVTec-bottle:latest",
+                                "dataset-artifact": "MVTec-transistor:latest",
                                 "root": "./artifacts/",
                                 "normal_dir": "normal/",
                                 "abnormal_dir": "test_abnormal/",
@@ -139,11 +143,14 @@ def infer():
                             },
                             "model": {
                                 "name": "patchcore",
+                                "model_artifact_name": "MVTec-transistor-patchcore",
+                                "export_path_root": "./artifacts",
+                                "onnx_opset_version": 11,
                                 "backbone": "wide_resnet50_2",
                                 "pre_trained": True,
                                 "layers": ["layer2", "layer3"],
-                                "coreset_sampling_ratio": 0.1,
-                                "num_neighbors": 9,
+                                "coreset_sampling_ratio": 0.05,
+                                "num_neighbors": 10,
                                 "normalization_method": "min_max"
                             },
                             "metrics": {
@@ -210,35 +217,37 @@ def infer():
                             }
                         })
 
+    wandb.config["trainer"]["limit_train_batches"] =  1.0
+    wandb.config["trainer"]["limit_val_batches"] = 1.0
+    wandb.config["trainer"]["limit_test_batches"] = 1.0
+    wandb.config["trainer"]["limit_predict_batches"] = 1.0
+    wandb.run.name = wandb.config["run_name"]
+    
     # Retrieve versioned artifacts for inference
     inf_art = wandb.use_artifact(wandb.config["inference_dataset"])
-    inf_art.download(root=wandb.config["artifacts_root"])
+    inf_path_at = inf_art.download()
 
-    model_art = wandb.use_artifact(wandb.config["model_checkpoint"])
-    model_art.download(root=wandb.config["artifacts_root"])
-
+    # model_art = wandb.use_artifact(f"model-registry/{wandb.config['registered_model_name_alias']}")
+    model_art = wandb.use_artifact(f"{wandb.config['model']['model_artifact_name']}-onnx:latest")
+    model_path_at = model_art.download()
+    
     wandb_conf = OmegaConf.create(dict(wandb.config))
     with open("config.yml", "w+") as fp:
         OmegaConf.save(config=wandb_conf, f=fp.name)
         config = get_configurable_parameters(model_name=wandb.config["model"], config_path="config.yml")
 
-    # config.trainer.resume_from_checkpoint = str(Path(wandb.config["artifacts_root"]) / "model.onnx")
     config.visualization.show_images = wandb.config["show"]
     config.visualization.mode = wandb.config["visualization_mode"]
+
     if wandb.config["output"]:  # overwrite save path
         config.visualization.save_images = True
         config.visualization.image_save_path = wandb.config["output"]
     else:
         config.visualization.save_images = False
-    # create model and trainer
-    model = get_model(config)
-    callbacks = get_callbacks(config)
 
-    # wandb_logger = WandbLogger(log_model=True, save_code=True)
-    # experiment_logger = get_experiment_logger(config)
-    # experiment_logger.append(wandb_logger)
-
-    # trainer = Trainer(callbacks=callbacks, logger=experiment_logger, **config.trainer)
+    wandb_logger = WandbLogger(log_model=True, save_code=True)
+    experiment_logger = get_experiment_logger(config)
+    experiment_logger.append(wandb_logger)
 
     # get the transforms
     transform_config = config.dataset.transform_config.eval if "transform_config" in config.dataset.keys() else None
@@ -252,14 +261,19 @@ def infer():
     )
 
     # create the dataset
-    dataset = InferenceDataset(str(Path(wandb.config["artifacts_root"]) / wandb.config["inference_dataset_path"]), image_size=tuple(config.dataset.image_size), transform=transform)
+    inference_dataset_path = os.path.join(inf_path_at, wandb.config["inference_dataset_path"])
+    print(inference_dataset_path)
+    dataset = InferenceDataset(inference_dataset_path, 
+                               image_size=tuple(config.dataset.image_size), 
+                               transform=transform)
+    print(dataset.__len__())
     dataloader = DataLoader(dataset)
-
-    model_path = str(Path(wandb.config["artifacts_root"]) / "model.onnx")
 
     # generate predictions
     # Load the ONNX model
-    onnx_model = onnx.load(model_path)
+    model_path_at = model_path_at + "/model.onnx"
+    print(model_path_at)
+    onnx_model = onnx.load(model_path_at)
     
     # Check the model
     try:
@@ -269,14 +283,14 @@ def infer():
     else:
         print("The model is valid!")
 
-    session = onnxruntime.InferenceSession(model_path, providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
+    session = onnxruntime.InferenceSession(model_path_at, providers=['CUDAExecutionProvider'])
 
     # Run ONNX Runtime inference
     results = []
     for batch in dataloader:
         binding = session.io_binding()
 
-        input_tensor = batch["image"].contiguous()
+        input_tensor = batch["image"].to('cuda:0').contiguous()
 
         binding.bind_input(
             name='input',
@@ -288,24 +302,28 @@ def infer():
             )
 
         ## Allocate the PyTorch tensor for the model output
-        Y_shape = ... # You need to specify the output PyTorch tensor shape
-        Y_tensor = torch.empty(Y_shape, dtype=torch.float32, device='cuda:0').contiguous()
+        Y_shape = (1, 1, wandb.config['dataset']['center_crop'], wandb.config['dataset']['center_crop']) 
+        Y_tensor = torch.empty(Y_shape, dtype=torch.float32, device='cuda:0').to('cuda:0').contiguous()
         binding.bind_output(
             name='output',
             device_type='cuda',
             device_id=0,
             element_type=np.float32,
-            shape=tuple(Y_tensor.shape),
+            shape=Y_shape,
             buffer_ptr=Y_tensor.data_ptr(),
         )
 
-        result = session.run_with_iobinding(binding)
-        results.append(result)
-        results = np.vstack(results)
-        print(results)
+        session.run_with_iobinding(binding)
+        results.append(Y_tensor)
 
-        log_wandb_table(results)
-        return results
+    results = torch.vstack(results)
+    results = results.to('cpu').numpy()
+    print(results.shape)
+
+    # log_wandb_table(wandb.config["registered_model_name_alias"].split(":")[0] + "-eval", results)
+    return results
 
 if __name__ == "__main__":
     results = infer()
+
+    

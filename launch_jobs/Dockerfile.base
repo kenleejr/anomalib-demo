@@ -3,4 +3,7 @@ FROM pytorch/pytorch:2.0.0-cuda11.7-cudnn8-runtime
 COPY ./launch_jobs/requirements.txt requirements.txt
 RUN pip install -r requirements.txt && \
     apt-get update && \
-    apt-get install ffmpeg libsm6 libxext6  -y
+    apt-get install ffmpeg libsm6 libxext6  -y && \
+    git clone --depth 1 --branch onnx-fix https://github.com/kenleejr/anomalib.git && \
+    cd anomalib && \
+    pip install -e .

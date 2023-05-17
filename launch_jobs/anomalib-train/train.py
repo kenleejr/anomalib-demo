@@ -74,8 +74,8 @@ def train():
                                 "backbone": "wide_resnet50_2",
                                 "pre_trained": True,
                                 "layers": ["layer2", "layer3"],
-                                "coreset_sampling_ratio": 0.05,
-                                "num_neighbors": 10,
+                                "coreset_sampling_ratio": 0.1,
+                                "num_neighbors": 9,
                                 "normalization_method": "min_max"
                             },
                             "metrics": {
@@ -103,9 +103,9 @@ def train():
                                 "logger": [],
                                 "log_graph": False
                             },
-                            # "optimization": {
-                            #     "export_mode": "onnx"
-                            # },
+                            "optimization": {
+                                "export_mode": "onnx"
+                            },
                             "trainer": {
                                 "enable_checkpointing": True,
                                 "default_root_dir": None,
@@ -207,20 +207,14 @@ def train():
         output_names=["output"],
     )
 
-    # script = model.to_torchscript()
-    # torch.jit.save(script, "model.pt")
-    # script_art = wandb.Artifact(f"{wandb.config['model']['model_artifact_name']}-torchscript", type="model")
-    # script_art.add_file("model.pt")
-    # wandb.log_artifact(script_art)
-
     model_art = wandb.Artifact(f"{wandb.config['model']['model_artifact_name']}-onnx", type="model")
-    model_art.add_file(onnx_path)
+    model_art.add_file(f"results/{wandb.config['model']['name']}/{wandb.config['dataset']['name']}/run/weights/onnx/model.onnx")
+    # model_art.add_file(onnx_path)
     wandb.log_artifact(model_art)
 
     results_art = wandb.Artifact(wandb.config["project"]["results_artifact_name"], type="validation_results")
     results_art.add_dir(results_path + "/run/images")
     wandb.log_artifact(results_art)
-
 
     torch_art = wandb.use_artifact(f"{wandb.config['model']['model_artifact_name']}-torch:latest")
     wandb.run.link_artifact(torch_art, f"model-registry/{wandb.config['model']['registered_model_name']}", aliases=["staging"])
