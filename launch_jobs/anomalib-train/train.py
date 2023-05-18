@@ -30,11 +30,11 @@ def train():
                            config={
                             "log_level": "INFO",
                             "show_images": True,
-                            "run_name": "MVTec-transistor-train",
+                            "run_name": "MVTec-bottle-train",
                             "dataset": {
-                                "name": "MVTec-transistor",
+                                "name": "MVTec-bottle",
                                 "format": "folder",
-                                "dataset-artifact": "MVTec-transistor:latest",
+                                "dataset-artifact": "MVTec-bottle:latest",
                                 "root": "./artifacts/",
                                 "normal_dir": "normal_dir/",
                                 "abnormal_dir": "abnormal_dir/",
@@ -67,8 +67,8 @@ def train():
                             },
                             "model": {
                                 "name": "patchcore",
-                                "model_artifact_name": "MVTec-transistor-patchcore",
-                                "registered_model_name": "MVTec-transistor",
+                                "model_artifact_name": "MVTec-bottle-patchcore",
+                                "registered_model_name": "MVTec-bottle",
                                 "export_path_root": "./artifacts",
                                 "onnx_opset_version": 11,
                                 "backbone": "wide_resnet50_2",
@@ -208,16 +208,16 @@ def train():
     )
 
     model_art = wandb.Artifact(f"{wandb.config['model']['model_artifact_name']}-onnx", type="model")
-    model_art.add_file(f"results/{wandb.config['model']['name']}/{wandb.config['dataset']['name']}/run/weights/onnx/model.onnx")
-    # model_art.add_file(onnx_path)
+    # model_art.add_file(f"results/{wandb.config['model']['name']}/{wandb.config['dataset']['name']}/run/weights/onnx/model.onnx")
+    model_art.add_file(onnx_path)
     wandb.log_artifact(model_art)
 
     results_art = wandb.Artifact(wandb.config["project"]["results_artifact_name"], type="validation_results")
     results_art.add_dir(results_path + "/run/images")
     wandb.log_artifact(results_art)
 
-    torch_art = wandb.use_artifact(f"{wandb.config['model']['model_artifact_name']}-torch:latest")
-    wandb.run.link_artifact(torch_art, f"model-registry/{wandb.config['model']['registered_model_name']}", aliases=["staging"])
+    # torch_art = wandb.use_artifact(f"{wandb.config['model']['model_artifact_name']}-torch:latest")
+    wandb.run.link_artifact(model_art, f"model-registry/{wandb.config['model']['registered_model_name']}", aliases=["staging"])
 
     wandb.config = {}
     wandb.config = wandb_config_cache

@@ -29,7 +29,7 @@ if __name__ == "__main__":
     for t in task_names:
         make_config(t)
     for t in task_names:
-        launch_job(job_name="cvproject-trial-team/anomalib-demo/job-kenleejr_anomalib_inference:latest", 
+        launch_job(job_name="cvproject-trial-team/anomalib-demo/job-kenleejr_anomalib_infonnx:latest", 
                    entity="cvproject-trial-team", 
                    project="anomalib-demo", 
                    queue="ec2-p3.2xlarge", 

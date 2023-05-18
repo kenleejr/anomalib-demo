@@ -1,4 +1,4 @@
-FROM kenleejr/anomalib:latest
+FROM kenleejr/anomalib:base
 
 COPY ./launch_jobs/anomalib-train/train.py /anomalib/train.py
 WORKDIR /anomalib

@@ -35,57 +35,35 @@ from anomalib.utils.callbacks import (
     PostProcessingConfigurationCallback,
 )
 
-def log_wandb_table(model_name, results):
-  inference_table = wandb.Table(columns = ["prediction_pixels",
-                                           "prediction_heatmap",
-                                           "global_prediction", 
-                                           "global_label"])
+def log_wandb_table(model_name, 
+                    orig_images, 
+                    results, 
+                    scores):
+  inference_table = wandb.Table(columns = ["prediction_heatmap",
+                                           "global_prediction"])
 
-  for r in results:
+  for i, r, s in zip(orig_images, results, scores):
     # Convert the tensors to numpy arrays and wrap the image and masks with wandb.Image()
-    image = r.transpose(1, 2, 0)
-    anomaly_map = r["anomaly_maps"].numpy().squeeze()
-    pred_mask = r["pred_masks"].numpy().squeeze()
-    pred_boxes = r["pred_boxes"]
-
-    heat_map = wandb.Image(superimpose_anomaly_map(anomaly_map=anomaly_map, image=Denormalize()(r["image"]), normalize=True))
-
+    anomaly_map = r.squeeze()
+    orig_image = i.squeeze()
+    heat_map = wandb.Image(superimpose_anomaly_map(anomaly_map=anomaly_map, image=Denormalize()(orig_image), normalize=True))
+    # image = torch.transpose(i.squeeze(), 1, 2, 0)
     # Create prediction image with segmentation masks
-    class_labels = {
-        1: "anomaly"
-    }
-    mask_data = pred_mask.astype(int)
-    prediction = wandb.Image(image, masks={
-        "predictions": {
-            "mask_data": mask_data,
-            "class_labels": class_labels
-        }
-    })
-    # Create prediction_boxes image with bounding boxes
-    # boxes = []
-    # for i, b in enumerate(pred_boxes):
-    #   if b.shape[0] != 4:
-    #      continue
-    #   b = b.squeeze()
-    #   boxes.append({
-    #       "position": {
-    #           "minX": float(b[0]),
-    #           "maxX": float(b[2]),
-    #           "minY": float(b[1]),
-    #           "maxY": float(b[3])
-    #       },
-    #       "class_id": int(r["box_labels"][i].item()),
-    #       "box_caption": "Anomaly",
-    #       "scores": {
-    #           "score": float(r["box_scores"][i].item())
-    #       }
-    #   })
-    # prediction_boxes = wandb.Image(image, boxes={"predictions": {"box_data": boxes}})
+    # class_labels = {
+    #     1: "anomaly"
+    # }
+    # mask_data = pred_mask.astype(int)
+    # prediction = wandb.Image(image, masks={
+    #     "predictions": {
+    #         "mask_data": mask_data,
+    #         "class_labels": class_labels
+    #     }
+    # })
 
     # Extract other fields
-    global_prediction = float(r["pred_scores"].item())
-    global_label = bool(r["pred_labels"].item())
-    inference_table.add_data(prediction, heat_map, global_prediction, global_label)
+    global_prediction = float(s.item())
+    # global_label = bool(r["pred_labels"].item())
+    inference_table.add_data(heat_map, global_prediction)
 
   # Log the table
   wandb.log({f"{model_name}/validation_table": inference_table})
@@ -96,21 +74,21 @@ def infer():
     wandb.init(project=PROJECT_NAME, 
                entity=ENTITY,
                job_type='inference',
-               config={"run_name": "MVTec-transistor-eval",
+               config={"run_name": "MVTec-bottle-eval",
                        "log_level": "INFO",
                        "model": "patchcore",
                         "show_images": True,
-                        "registered_model_name_alias": "MVTec-transistor:latest",
-                       "inference_dataset": "MVTec-transistor:latest",
+                        "registered_model_name_alias": "MVTec-bottle:latest",
+                       "inference_dataset": "MVTec-bottle:latest",
                        "inference_dataset_path": "abnormal_dir/",
                        "output": "inference_results",
                        "artifacts_root": "./artifacts",
                        "visualization_mode": "simple",
                        "show": False,
                             "dataset": {
-                                "name": "MVTec-transistor",
+                                "name": "MVTec-bottle",
                                 "format": "folder",
-                                "dataset-artifact": "MVTec-transistor:latest",
+                                "dataset-artifact": "MVTec-bottle:latest",
                                 "root": "./artifacts/",
                                 "normal_dir": "normal/",
                                 "abnormal_dir": "test_abnormal/",
@@ -143,7 +121,7 @@ def infer():
                             },
                             "model": {
                                 "name": "patchcore",
-                                "model_artifact_name": "MVTec-transistor-patchcore",
+                                "model_artifact_name": "MVTec-bottle-patchcore",
                                 "export_path_root": "./artifacts",
                                 "onnx_opset_version": 11,
                                 "backbone": "wide_resnet50_2",
@@ -227,8 +205,7 @@ def infer():
     inf_art = wandb.use_artifact(wandb.config["inference_dataset"])
     inf_path_at = inf_art.download()
 
-    # model_art = wandb.use_artifact(f"model-registry/{wandb.config['registered_model_name_alias']}")
-    model_art = wandb.use_artifact(f"{wandb.config['model']['model_artifact_name']}-onnx:latest")
+    model_art = wandb.use_artifact(f"model-registry/{wandb.config['registered_model_name_alias']}")
     model_path_at = model_art.download()
     
     wandb_conf = OmegaConf.create(dict(wandb.config))
@@ -286,7 +263,9 @@ def infer():
     session = onnxruntime.InferenceSession(model_path_at, providers=['CUDAExecutionProvider'])
 
     # Run ONNX Runtime inference
-    results = []
+    anomaly_map_results = []
+    anomaly_score_results = []
+    orig_images = []
     for batch in dataloader:
         binding = session.io_binding()
 
@@ -303,25 +282,38 @@ def infer():
 
         ## Allocate the PyTorch tensor for the model output
         Y_shape = (1, 1, wandb.config['dataset']['center_crop'], wandb.config['dataset']['center_crop']) 
-        Y_tensor = torch.empty(Y_shape, dtype=torch.float32, device='cuda:0').to('cuda:0').contiguous()
+        anomaly_map_tensor = torch.empty(Y_shape, dtype=torch.float32, device='cuda:0').to('cuda:0').contiguous()
+        anomaly_score = torch.empty(1, dtype=torch.float32, device='cuda:0').to('cuda:0').contiguous()
+
         binding.bind_output(
             name='output',
             device_type='cuda',
             device_id=0,
             element_type=np.float32,
             shape=Y_shape,
-            buffer_ptr=Y_tensor.data_ptr(),
+            buffer_ptr=anomaly_map_tensor.data_ptr(),
+        )
+
+        binding.bind_output(
+            name='560',
+            device_type='cuda',
+            device_id=0,
+            element_type=np.float32,
+            shape=tuple(anomaly_score.shape),
+            buffer_ptr=anomaly_score.data_ptr(),
         )
 
         session.run_with_iobinding(binding)
-        results.append(Y_tensor)
+        orig_images.append(batch["image"])
+        anomaly_map_results.append(anomaly_map_tensor.to('cpu').numpy())
+        anomaly_score_results.append(anomaly_score.to('cpu').numpy())
 
-    results = torch.vstack(results)
-    results = results.to('cpu').numpy()
-    print(results.shape)
-
-    # log_wandb_table(wandb.config["registered_model_name_alias"].split(":")[0] + "-eval", results)
-    return results
+    log_wandb_table(wandb.config["registered_model_name_alias"].split(":")[0] + "-eval", 
+                    orig_images,
+                    anomaly_map_results, 
+                    anomaly_score_results)
+    
+    return anomaly_map_results
 
 if __name__ == "__main__":
     results = infer()

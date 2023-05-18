@@ -1,0 +1,6 @@
+FROM kenleejr/anomalib:base
+
+COPY ./launch_jobs/anomalib-inference/inference_onnx.py /anomalib/inference_onnx.py
+WORKDIR /anomalib
+
+CMD ["python", "/anomalib/inference_onnx.py"]
