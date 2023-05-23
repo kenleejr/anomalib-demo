@@ -1,0 +1,2 @@
+FROM nvcr.io/nvidia/tritonserver:23.02-py3
+ENTRYPOINT [ "tritonserver", "--model-control-mode=poll", "--model-repository", "/mnt/artifacts/triton-model-repo"]
