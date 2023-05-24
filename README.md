@@ -86,11 +86,16 @@ wandb launch-agent -q <my_queue> -e <my_team> -j <num_parallel_jobs>
 ```
 Now that machine is ready to receive training jobs and can execute `-j` number of jobs in parallel on that machine. It will poll the <queue> for jobs from W&B to execute.
   
-4. From another terminal on your laptop or wherever you have `wandb` installed, run:
+4. The training container is already built and pushed to a public Dockerhub repo so you can use that out the box. From another terminal on your laptop or wherever you have `wandb` installed, run:
 ```
 wandb launch -d kenleejr/anomalib:train -q <my_queue> -e <my_team> -p <my_project> -c <path_to_my_config.json>
 ```
-This will launch the container (which just runs the anomalib training script with the config paramaters specified)
+This will launch the container (which just runs the anomalib training script with the config paramaters specified). Otherwise, you can build the container yourself and push to a repo of your choice:
+```
+docker build . -f launch_jobs/anomalib-train/Dockerfile.train -t <repo/image_name:tag>
+docker push <repo/image_name:tag>
+wandb launch -d <repo/image_name:tag> -q <my_queue> -e <my_team> -p <my_project> -c <path_to_my_config.json>
+```
   
 5. After the job is launched the first time, a named job will get created in your W&B project and can be re-used and re-configured however you like.
 For instance, you may want to change out the training dataset or the hyperparameters of the training job that runs. Each time you run the above steps with a new image, W&B will create a new version of the job. To launch a specific job version, run:
