@@ -1,4 +1,4 @@
-# W&B Anomalib Launch Demo
+# W&B Launch for Anomalib
 
 This repo uses W&B Launch to facilitate scaled out re-training, evaluation, and deployment of `anomalib` anomaly detection models. 
 
