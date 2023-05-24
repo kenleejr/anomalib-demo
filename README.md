@@ -86,7 +86,7 @@ wandb launch-agent -q <my_queue> -e <my_team> -j <num_parallel_jobs>
 ```
 Now that machine is ready to receive training jobs and can execute `-j` number of jobs in parallel on that machine. It will poll the <queue> for jobs from W&B to execute.
   
-4. Wherever you have this repo cloned, run:
+4. From another terminal on your laptop or wherever you have `wandb` installed, run:
 ```
 wandb launch -d kenleejr/anomalib:train -q <my_queue> -e <my_team> -p <my_project> -c <path_to_my_config.json>
 ```
