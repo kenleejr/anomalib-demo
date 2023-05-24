@@ -78,7 +78,7 @@ In `launch_jobs/anomalib-train` there is everything you need to create a launch 
 ```
 
 3. Next [create a queue](https://docs.wandb.ai/guides/launch/create-queue) in your W&B team. For this example, just choose a `Docker` queue.
-4. Run a [W&B agent](https://docs.wandb.ai/guides/launch/run-agent) in on a machine which has access to GPUs:
+4. Run a [W&B agent](https://docs.wandb.ai/guides/launch/run-agent) in on a machine which has access to GPUs and has CUDA >= 11.7 and cuDNN >= 8:
 ```
 pip install wandb
 wandb login
