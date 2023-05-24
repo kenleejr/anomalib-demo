@@ -1,4 +1,4 @@
-## W&B Anomalib Launch Demo
+# W&B Anomalib Launch Demo
 
 This repo uses W&B Launch to facilitate scaled out re-training, evaluation, and deployment of `anomalib` anomaly detection models. 
 
@@ -37,3 +37,10 @@ For instance, you may want to change out the training dataset or the hyperparame
 ```
 wandb launch -j <my_job_name:alias> -q <my_queue> -e <my_entity> -p <my_project> -c <path_to_my_config.json>
 ```
+## Anomalib Training
+1.) Create Launch Job
+In `launch_jobs/anomalib-train` there is everything you need to create a launch job: 
+- `Dockerfile.train` installs dependencies for anomalib
+- `train.py` containing training logic from anomalib
+- `launch_jobs/anomalib-train/launch_configs/base_config.json` for the config to the launch job (dataset, model hyperparameters, etc.)
+To create the job you need to launch the docker container `kenleejr/anomalib:train` 
