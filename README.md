@@ -9,38 +9,29 @@ The `launch_jobs` directory contains the scripts and Dockerfiles required to cre
 Currently there are two jobs supported: anomalib training and anomalib inference. 
 These jobs take the [CLI utilities](https://github.com/openvinotoolkit/anomalib/blob/v0.4.0/tools/train.py) in the anomalib repo and turn them into portable W&B jobs that can be run on other infrastructure without having to worry about environment configuration. 
 
-To run jobs you will first need a to 1) [create a queue](https://docs.wandb.ai/guides/launch/create-queue) and 2) run a [W&B agent](https://docs.wandb.ai/guides/launch/run-agent) in infrastructure of your choice. For instance, if you want to run the anomalib training job on an EC2 instance, you would run:
-```
-pip install wandb
-wandb launch-agent -q <my_queue> -e <my_entity> -j <num_parallel_jobs>
-```
-in a shell on the EC2 instance. To run an agent in a k8s cluster see the [Launch docs](https://docs.wandb.ai/guides/launch/kubernetes).
-
-Once the agent is running, you are now ready to create and launch jobs to it. Once a job is created, you can launch it via CLI or the W&B UI. 
-To create the training job run:
-```
-docker build . -f launch_jobs/anomalib-training/Dockerfile.train -t <repo/my_image:tag>
-docker push <repo/my_image:tag>
-```
-
-To create the anomalib inference job:
-```
-docker build . -f launch_jobs/anomalib-inference/Dockerfile.inf -t <repo/my_image:tag>
-docker push <repo/my_image:tag>
-```
-To launch the images, you can simply execute:
-```
-wandb launch -d <repo/my_image:tag> -q <my_queue> -e <my_entity> -p <my_project> -c <path_to_my_config.json>
-```
-After the job is launched the first time, a named job will get created in your W&B project and can be re-used and re-configured however you like.
-For instance, you may want to change out the training dataset or the hyperparameters of the training job that runs. Each time you run the above steps with a new image, W&B will create a new version of the job. To launch a specific job version, run:
-```
-wandb launch -j <my_job_name:alias> -q <my_queue> -e <my_entity> -p <my_project> -c <path_to_my_config.json>
-```
-## Anomalib Training
-1.) Create Launch Job
+## Anomalib Training Job
 In `launch_jobs/anomalib-train` there is everything you need to create a launch job: 
 - `Dockerfile.train` installs dependencies for anomalib
 - `train.py` containing training logic from anomalib
 - `launch_jobs/anomalib-train/launch_configs/base_config.json` for the config to the launch job (dataset, model hyperparameters, etc.)
-To create the job you need to launch the docker container `kenleejr/anomalib:train` 
+
+### Creating the Job in your W&B Project
+1. First you must have a dataset of images logged as a W&B artifact, as this artifact will be an input to the job. Once you have that, copy and edit `base_config.json` to reflect this dataset artifact name and alias, hyperparameters, etc. you want for this intial job. 
+2. Next create a [create a queue](https://docs.wandb.ai/guides/launch/create-queue) in your W&B team. For this example, just choose a `Docker` queue.
+3. Run a [W&B agent](https://docs.wandb.ai/guides/launch/run-agent) in on a machine which has access to GPUs:
+```
+pip install wandb
+wandb login
+wandb launch-agent -q <my_queue> -e <my_team> -j <num_parallel_jobs>
+```
+Now that machine is ready to receive training jobs and can execute `-j` number of jobs in parallel on that machine. It will poll the <queue> for jobs from W&B to execute. 
+4. Wherever you have this repo cloned, run:
+```
+wandb launch -d kenleejr/anomalib:train -q <my_queue> -e <my_team> -p <my_project> -c <path_to_my_config.json>
+```
+This will launch the container (which just runs the anomalib training script with the config paramaters specified)
+5. After the job is launched the first time, a named job will get created in your W&B project and can be re-used and re-configured however you like.
+For instance, you may want to change out the training dataset or the hyperparameters of the training job that runs. Each time you run the above steps with a new image, W&B will create a new version of the job. To launch a specific job version, run:
+```
+wandb launch -j <my_job_name:alias> -q <my_queue> -e <my_entity> -p <my_project> -c <path_to_my_config.json>
+```
